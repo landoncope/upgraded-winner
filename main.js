@@ -135,26 +135,61 @@ loadGameData();
 // Generate simple sound effects using Web Audio API
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-// Background music
-const bgMusic = new Audio();
-// Using a reliable public domain music source
-bgMusic.src = 'https://freepd.com/music/Cipher.mp3'; // "Cipher" by Kevin MacLeod (Public Domain)
-bgMusic.loop = true;
-bgMusic.volume = 0.3;
-bgMusic.preload = 'auto';
+// Background music using Web Audio API (procedurally generated)
+let bgMusicOscillators = [];
+let bgMusicGain = null;
+let isMusicPlaying = false;
 
-// Add error listener
-bgMusic.addEventListener('error', (e) => {
-    console.error('Background music error:', e);
-    console.log('Trying fallback source...');
-    // Fallback to different source
-    bgMusic.src = 'https://archive.org/download/Kevin_MacLeod_-_Parting_of_the_Ways/Kevin_MacLeod_-_Parting_of_the_Ways.mp3';
-    bgMusic.load();
-});
+function createBackgroundMusic() {
+    if (isMusicPlaying) return;
+    
+    // Create a simple cheerful melody loop
+    const notes = [
+        { freq: 523.25, duration: 0.3 }, // C5
+        { freq: 587.33, duration: 0.3 }, // D5
+        { freq: 659.25, duration: 0.3 }, // E5
+        { freq: 587.33, duration: 0.3 }, // D5
+        { freq: 523.25, duration: 0.3 }, // C5
+        { freq: 659.25, duration: 0.3 }, // E5
+        { freq: 783.99, duration: 0.6 }  // G5
+    ];
+    
+    let currentTime = audioContext.currentTime;
+    
+    function playMelodyLoop() {
+        if (!isMusicPlaying) return;
+        
+        bgMusicGain = audioContext.createGain();
+        bgMusicGain.connect(audioContext.destination);
+        bgMusicGain.gain.value = 0.1; // Quiet background music
+        
+        notes.forEach((note, index) => {
+            const oscillator = audioContext.createOscillator();
+            oscillator.connect(bgMusicGain);
+            oscillator.type = 'sine';
+            oscillator.frequency.value = note.freq;
+            
+            const startTime = currentTime + (index * 0.3);
+            oscillator.start(startTime);
+            oscillator.stop(startTime + note.duration);
+        });
+        
+        currentTime += notes.length * 0.3;
+        
+        // Schedule next loop
+        setTimeout(playMelodyLoop, notes.length * 300);
+    }
+    
+    isMusicPlaying = true;
+    playMelodyLoop();
+}
 
-bgMusic.addEventListener('canplaythrough', () => {
-    console.log('Background music loaded successfully');
-});
+function stopBackgroundMusic() {
+    isMusicPlaying = false;
+    if (bgMusicGain) {
+        bgMusicGain.gain.setValueAtTime(0, audioContext.currentTime);
+    }
+}
 
 function createFlapSound() {
     const oscillator = audioContext.createOscillator();
@@ -226,23 +261,19 @@ const audio = {
     toggleMute() {
         gameState.isMuted = !gameState.isMuted;
         if (gameState.isMuted) {
-            bgMusic.pause();
+            stopBackgroundMusic();
         } else if (gameState.current === STATE.PLAYING) {
-            bgMusic.play().catch(e => console.error('Music toggle play failed:', e));
+            createBackgroundMusic();
         }
         saveGameData();
     },
     startMusic() {
         if (!gameState.isMuted) {
-            console.log('Attempting to start music...');
-            bgMusic.play()
-                .then(() => console.log('Music started successfully'))
-                .catch(e => console.error('Music playback failed:', e));
+            createBackgroundMusic();
         }
     },
     stopMusic() {
-        bgMusic.pause();
-        bgMusic.currentTime = 0;
+        stopBackgroundMusic();
     }
 };
 
@@ -589,11 +620,11 @@ function startGame() {
 function togglePause() {
     if (gameState.current === STATE.PLAYING) {
         gameState.current = STATE.PAUSED;
-        bgMusic.pause();
+        stopBackgroundMusic();
     } else if (gameState.current === STATE.PAUSED) {
         gameState.current = STATE.PLAYING;
         if (!gameState.isMuted) {
-            bgMusic.play().catch(e => console.error('Music resume failed:', e));
+            createBackgroundMusic();
         }
     }
 }
