@@ -21,15 +21,15 @@ const CONFIG = {
     pipeWidth: 60,
     baseSpeed: 1.2,
     maxSpeed: 3.5,
-    speedIncrement: 0.1,
+    speedIncrement: 0.12,  // 10% of baseSpeed per level
     
     baseGap: 200,
     minGap: 150,
     gapDecrement: 2,
     
-    baseSpawnInterval: 150,
+    baseSpawnInterval: 180,
     minSpawnInterval: 110,
-    spawnDecrement: 1.5,
+    spawnDecrement: 3,
     
     // Difficulty progression
     pipesPerLevel: 8,  // Every 8 pipes = new level
