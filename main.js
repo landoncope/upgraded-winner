@@ -1,12 +1,55 @@
 // ===========================
+// FLYING TOILET - FLAPPY BIRD CLONE
+// A bathroom-themed endless runner game
+// ===========================
+
+// ===========================
+// CONFIGURATION
+// ===========================
+// All game tunables in one place for easy balancing
+const CONFIG = {
+    // Canvas settings
+    gameWidth: 400,
+    gameHeight: 600,
+    
+    // Toilet physics
+    gravity: 0.35,
+    flapPower: -7,
+    maxVelocity: 8,
+    
+    // Pipe settings
+    pipeWidth: 60,
+    baseSpeed: 1.5,
+    maxSpeed: 4.5,
+    speedIncrement: 0.15,
+    
+    baseGap: 180,
+    minGap: 130,
+    gapDecrement: 3,
+    
+    baseSpawnInterval: 110,
+    minSpawnInterval: 75,
+    spawnDecrement: 2,
+    
+    // Difficulty progression
+    pipesPerLevel: 5,  // Every 5 pipes = new level
+    
+    // Ground height
+    groundHeight: 50
+};
+
+// ===========================
 // CANVAS SETUP
 // ===========================
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Use device pixel ratio for crisp rendering
+const dpr = window.devicePixelRatio || 1;
+
 // Virtual game dimensions (scaled to actual canvas)
-const GAME_WIDTH = 400;
-const GAME_HEIGHT = 600;
+const GAME_WIDTH = CONFIG.gameWidth;
+const GAME_HEIGHT = CONFIG.gameHeight;
 
 // Resize canvas to fill window while maintaining aspect ratio
 function resizeCanvas() {
@@ -14,12 +57,16 @@ function resizeCanvas() {
     const windowRatio = window.innerWidth / window.innerHeight;
     
     if (windowRatio > aspectRatio) {
-        canvas.height = window.innerHeight;
-        canvas.width = window.innerHeight * aspectRatio;
+        canvas.height = window.innerHeight * dpr;
+        canvas.width = window.innerHeight * aspectRatio * dpr;
     } else {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerWidth / aspectRatio;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerWidth / aspectRatio * dpr;
     }
+    
+    // Scale back for CSS
+    canvas.style.width = (canvas.width / dpr) + 'px';
+    canvas.style.height = (canvas.height / dpr) + 'px';
 }
 
 resizeCanvas();
@@ -33,6 +80,28 @@ function scaleContext() {
 }
 
 // ===========================
+// GAME STATE
+// ===========================
+const STATE = {
+    START: 'START',
+    PLAYING: 'PLAYING',
+    PAUSED: 'PAUSED',
+    GAME_OVER: 'GAME_OVER'
+};
+
+const gameState = {
+    current: STATE.START,
+    score: 0,
+    highScore: 0,
+    frame: 0,
+    isMuted: false,
+    level: 1,
+    pipesPassed: 0,
+    bestLevel: 1,
+    showingHelp: false
+};
+
+// ===========================
 // LOCAL STORAGE
 // ===========================
 function loadGameData() {
@@ -42,6 +111,7 @@ function loadGameData() {
             const data = JSON.parse(saved);
             gameState.highScore = data.highScore || 0;
             gameState.isMuted = data.isMuted || false;
+            gameState.bestLevel = data.bestLevel || 1;
         } catch (e) {
             console.error('Failed to load game data');
         }
@@ -51,7 +121,8 @@ function loadGameData() {
 function saveGameData() {
     const data = {
         highScore: gameState.highScore,
-        isMuted: gameState.isMuted
+        isMuted: gameState.isMuted,
+        bestLevel: gameState.bestLevel
     };
     localStorage.setItem('flyingToiletData', JSON.stringify(data));
 }
@@ -138,23 +209,6 @@ const audio = {
 };
 
 // ===========================
-// GAME STATE
-// ===========================
-const STATE = {
-    START: 'START',
-    PLAYING: 'PLAYING',
-    GAME_OVER: 'GAME_OVER'
-};
-
-const gameState = {
-    current: STATE.START,
-    score: 0,
-    highScore: 0,
-    frame: 0,
-    isMuted: false
-};
-
-// ===========================
 // TOILET (PLAYER)
 // ===========================
 const toilet = {
@@ -163,9 +217,9 @@ const toilet = {
     width: 40,
     height: 40,
     velocity: 0,
-    gravity: 0.35,
-    flapPower: -7,
-    maxVelocity: 8,
+    gravity: CONFIG.gravity,
+    flapPower: CONFIG.flapPower,
+    maxVelocity: CONFIG.maxVelocity,
     
     flap() {
         if (gameState.current !== STATE.GAME_OVER) {
@@ -258,20 +312,38 @@ const toilet = {
 // ===========================
 const pipes = {
     list: [],
-    gap: 180,
-    width: 60,
-    speed: 1.5,
-    spawnInterval: 110, // frames between spawns
+    gap: CONFIG.baseGap,
+    width: CONFIG.pipeWidth,
+    speed: CONFIG.baseSpeed,
+    spawnInterval: CONFIG.baseSpawnInterval,
+    
+    // Calculate current difficulty based on level
+    // Difficulty scales every CONFIG.pipesPerLevel pipes passed
+    getCurrentGap() {
+        const gap = CONFIG.baseGap - (gameState.level - 1) * CONFIG.gapDecrement;
+        return Math.max(gap, CONFIG.minGap);
+    },
+    
+    getCurrentSpeed() {
+        const speed = CONFIG.baseSpeed + (gameState.level - 1) * CONFIG.speedIncrement;
+        return Math.min(speed, CONFIG.maxSpeed);
+    },
+    
+    getCurrentSpawnInterval() {
+        const interval = CONFIG.baseSpawnInterval - (gameState.level - 1) * CONFIG.spawnDecrement;
+        return Math.max(interval, CONFIG.minSpawnInterval);
+    },
     
     spawn() {
         const minY = 50;
-        const maxY = GAME_HEIGHT - 50 - this.gap - 100;
+        const currentGap = this.getCurrentGap();
+        const maxY = GAME_HEIGHT - CONFIG.groundHeight - currentGap - 100;
         const topHeight = Math.random() * (maxY - minY) + minY;
         
         this.list.push({
             x: GAME_WIDTH,
             topHeight: topHeight,
-            bottomY: topHeight + this.gap,
+            bottomY: topHeight + currentGap,
             scored: false
         });
     },
@@ -279,15 +351,18 @@ const pipes = {
     update() {
         if (gameState.current !== STATE.PLAYING) return;
         
-        // Spawn new pipes
-        if (gameState.frame % this.spawnInterval === 0) {
+        const currentSpeed = this.getCurrentSpeed();
+        const currentInterval = this.getCurrentSpawnInterval();
+        
+        // Spawn new pipes at intervals (gets faster as level increases)
+        if (gameState.frame % currentInterval === 0) {
             this.spawn();
         }
         
-        // Update pipe positions
+        // Update pipe positions and check collisions
         for (let i = this.list.length - 1; i >= 0; i--) {
             const pipe = this.list[i];
-            pipe.x -= this.speed;
+            pipe.x -= currentSpeed;
             
             // Remove off-screen pipes
             if (pipe.x + this.width < 0) {
@@ -300,11 +375,21 @@ const pipes = {
                 endGame();
             }
             
-            // Update score
+            // Update score and check for level progression
             if (!pipe.scored && pipe.x + this.width < toilet.x) {
                 pipe.scored = true;
                 gameState.score++;
+                gameState.pipesPassed++;
                 audio.playScore();
+                
+                // Level up every N pipes - difficulty increases
+                const newLevel = Math.floor(gameState.pipesPassed / CONFIG.pipesPerLevel) + 1;
+                if (newLevel > gameState.level) {
+                    gameState.level = newLevel;
+                    if (gameState.level > gameState.bestLevel) {
+                        gameState.bestLevel = gameState.level;
+                    }
+                }
             }
         }
     },
@@ -312,11 +397,11 @@ const pipes = {
     checkCollision(pipe) {
         const toiletBounds = toilet.getBounds();
         
-        // Check if toilet is horizontally aligned with pipe
+        // AABB collision detection: Check if toilet is horizontally aligned with pipe
         if (toiletBounds.x + toiletBounds.width > pipe.x && 
             toiletBounds.x < pipe.x + this.width) {
             
-            // Check if toilet hits top pipe or bottom pipe
+            // Check if toilet hits top pipe or bottom pipe (not in the gap)
             if (toiletBounds.y < pipe.topHeight || 
                 toiletBounds.y + toiletBounds.height > pipe.bottomY) {
                 return true;
@@ -388,6 +473,18 @@ document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyM') {
         audio.toggleMute();
     }
+    
+    if (e.code === 'KeyP') {
+        togglePause();
+    }
+    
+    if (e.code === 'Escape') {
+        if (gameState.showingHelp) {
+            gameState.showingHelp = false;
+        } else if (gameState.current === STATE.PAUSED) {
+            togglePause();
+        }
+    }
 });
 
 // Mouse/Touch input
@@ -407,11 +504,14 @@ function endGame() {
         gameState.current = STATE.GAME_OVER;
         audio.playHit();
         
-        // Update high score
+        // Update high score and best level
         if (gameState.score > gameState.highScore) {
             gameState.highScore = gameState.score;
-            saveGameData();
         }
+        if (gameState.level > gameState.bestLevel) {
+            gameState.bestLevel = gameState.level;
+        }
+        saveGameData();
     }
 }
 
@@ -419,6 +519,8 @@ function restart() {
     gameState.current = STATE.PLAYING;
     gameState.score = 0;
     gameState.frame = 0;
+    gameState.level = 1;
+    gameState.pipesPassed = 0;
     
     toilet.y = GAME_HEIGHT / 2;
     toilet.velocity = 0;
@@ -429,6 +531,14 @@ function restart() {
 function startGame() {
     gameState.current = STATE.PLAYING;
     toilet.flap();
+}
+
+function togglePause() {
+    if (gameState.current === STATE.PLAYING) {
+        gameState.current = STATE.PAUSED;
+    } else if (gameState.current === STATE.PAUSED) {
+        gameState.current = STATE.PLAYING;
+    }
 }
 
 // ===========================
@@ -473,6 +583,7 @@ function drawGround() {
 
 function drawScore() {
     if (gameState.current !== STATE.START) {
+        // Main score with shadow
         ctx.fillStyle = '#000';
         ctx.strokeStyle = '#FFF';
         ctx.lineWidth = 4;
@@ -480,6 +591,19 @@ function drawScore() {
         ctx.textAlign = 'center';
         ctx.strokeText(gameState.score, GAME_WIDTH / 2, 60);
         ctx.fillText(gameState.score, GAME_WIDTH / 2, 60);
+        
+        // Level indicator (top left)
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`Level ${gameState.level}`, 10, 30);
+        
+        // Speed indicator (small visual feedback)
+        const currentSpeed = pipes.getCurrentSpeed();
+        const speedPercent = ((currentSpeed - CONFIG.baseSpeed) / (CONFIG.maxSpeed - CONFIG.baseSpeed)) * 100;
+        ctx.fillStyle = '#666';
+        ctx.font = '14px Arial';
+        ctx.fillText(`Speed: ${Math.round(speedPercent)}%`, 10, 50);
     }
 }
 
@@ -502,6 +626,33 @@ function drawButton(text, x, y, width, height) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, x + width / 2, y + height / 2);
+}
+
+function drawSmallButton(text, x, y, width, height) {
+    // Smaller button variant
+    ctx.fillStyle = 'rgba(70, 130, 180, 0.8)';
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeStyle = '#4682B4';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, width, height);
+    
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + width / 2, y + height / 2);
+}
+
+function drawHUD() {
+    if (gameState.current === STATE.PLAYING || gameState.current === STATE.PAUSED) {
+        // Pause button (top right)
+        drawSmallButton('❚❚', GAME_WIDTH - 60, 10, 50, 35);
+        
+        // Mute indicator (top right, below pause)
+        const muteIcon = gameState.isMuted ? '🔇' : '🔊';
+        ctx.font = '24px Arial';
+        ctx.fillText(muteIcon, GAME_WIDTH - 35, 65);
+    }
 }
 
 function drawStartScreen() {
@@ -531,17 +682,22 @@ function drawStartScreen() {
     // Play button
     drawButton('PLAY', GAME_WIDTH / 2 - 80, 380, 160, 50);
     
+    // Help button
+    drawSmallButton('?', GAME_WIDTH / 2 - 25, 450, 50, 40);
+    
     // Mute button
     const muteText = gameState.isMuted ? '🔇 MUTED' : '🔊 SOUND ON';
     ctx.fillStyle = '#666';
     ctx.font = '18px Arial';
-    ctx.fillText(muteText, GAME_WIDTH / 2, 460);
+    ctx.fillText(muteText, GAME_WIDTH / 2, 510);
     
     // High score
     if (gameState.highScore > 0) {
         ctx.fillStyle = '#888';
         ctx.font = '20px Arial';
-        ctx.fillText(`Best: ${gameState.highScore}`, GAME_WIDTH / 2, 500);
+        ctx.fillText(`Best Score: ${gameState.highScore}`, GAME_WIDTH / 2, 545);
+        ctx.font = '16px Arial';
+        ctx.fillText(`Best Level: ${gameState.bestLevel}`, GAME_WIDTH / 2, 565);
     }
 }
 
@@ -556,32 +712,135 @@ function drawGameOver() {
     ctx.fillStyle = '#FF6B6B';
     ctx.font = 'bold 56px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('GAME OVER', GAME_WIDTH / 2, 180);
+    ctx.fillText('GAME OVER', GAME_WIDTH / 2, 140);
     
-    // Current score
+    // Stats panel
     ctx.fillStyle = '#FFF';
-    ctx.font = '32px Arial';
-    ctx.fillText(`Score: ${gameState.score}`, GAME_WIDTH / 2, 240);
+    ctx.font = '28px Arial';
+    ctx.fillText(`Score: ${gameState.score}`, GAME_WIDTH / 2, 200);
+    ctx.font = '22px Arial';
+    ctx.fillText(`Level Reached: ${gameState.level}`, GAME_WIDTH / 2, 235);
+    ctx.fillText(`Pipes Passed: ${gameState.pipesPassed}`, GAME_WIDTH / 2, 265);
     
-    // High score
-    ctx.font = 'bold 28px Arial';
+    // Best stats
+    ctx.font = 'bold 24px Arial';
     ctx.fillStyle = '#FFD700';
-    ctx.fillText(`Best: ${gameState.highScore}`, GAME_WIDTH / 2, 280);
+    ctx.fillText('BEST STATS', GAME_WIDTH / 2, 310);
+    ctx.fillStyle = '#FFF';
+    ctx.font = '20px Arial';
+    ctx.fillText(`High Score: ${gameState.highScore}`, GAME_WIDTH / 2, 340);
+    ctx.fillText(`Best Level: ${gameState.bestLevel}`, GAME_WIDTH / 2, 365);
     
     // Restart button
-    drawButton('RESTART', GAME_WIDTH / 2 - 80, 320, 160, 50);
+    drawButton('RESTART', GAME_WIDTH / 2 - 80, 400, 160, 50);
+    
+    // Help button
+    drawSmallButton('?', GAME_WIDTH / 2 - 25, 465, 50, 35);
     
     // Mute button
     const muteText = gameState.isMuted ? 'UNMUTE (M)' : 'MUTE (M)';
     ctx.fillStyle = '#AAA';
+    ctx.font = '16px Arial';
+    ctx.fillText(muteText, GAME_WIDTH / 2, 525);
+}
+
+function drawPauseScreen() {
+    if (gameState.current !== STATE.PAUSED) return;
+    
+    // Semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Pause text
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 64px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
+    
+    ctx.font = '24px Arial';
+    ctx.fillText('Press P to Resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40);
+}
+
+function drawHelpOverlay() {
+    if (!gameState.showingHelp) return;
+    
+    // Full overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Help panel
+    ctx.fillStyle = '#FFF';
+    ctx.fillRect(30, 40, GAME_WIDTH - 60, GAME_HEIGHT - 80);
+    
+    ctx.fillStyle = '#2E7D32';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('HOW TO PLAY', GAME_WIDTH / 2, 90);
+    
+    // Instructions
+    ctx.fillStyle = '#333';
     ctx.font = '18px Arial';
-    ctx.fillText(muteText, GAME_WIDTH / 2, 400);
+    ctx.textAlign = 'left';
+    const leftMargin = 50;
+    let yPos = 140;
+    
+    ctx.fillText('🎯 OBJECTIVE:', leftMargin, yPos);
+    yPos += 25;
+    ctx.font = '16px Arial';
+    ctx.fillText('Keep the toilet flying through pipes', leftMargin + 10, yPos);
+    yPos += 20;
+    ctx.fillText('without crashing. Score points by passing', leftMargin + 10, yPos);
+    yPos += 20;
+    ctx.fillText('pipes. Game gets harder every 5 pipes!', leftMargin + 10, yPos);
+    yPos += 35;
+    
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('🎮 CONTROLS:', leftMargin, yPos);
+    yPos += 25;
+    ctx.font = '16px Arial';
+    ctx.fillText('• SPACE or ↑ or CLICK/TAP - Flap', leftMargin + 10, yPos);
+    yPos += 25;
+    ctx.fillText('• P - Pause/Resume', leftMargin + 10, yPos);
+    yPos += 25;
+    ctx.fillText('• M - Mute/Unmute sounds', leftMargin + 10, yPos);
+    yPos += 25;
+    ctx.fillText('• R - Restart (after game over)', leftMargin + 10, yPos);
+    yPos += 25;
+    ctx.fillText('• ESC - Close this help', leftMargin + 10, yPos);
+    yPos += 35;
+    
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('📊 PROGRESSION:', leftMargin, yPos);
+    yPos += 25;
+    ctx.font = '16px Arial';
+    ctx.fillText('• Every 5 pipes = Level Up!', leftMargin + 10, yPos);
+    yPos += 25;
+    ctx.fillText('• Speed increases gradually', leftMargin + 10, yPos);
+    yPos += 25;
+    ctx.fillText('• Pipe gaps get tighter', leftMargin + 10, yPos);
+    yPos += 35;
+    
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#888';
+    ctx.textAlign = 'center';
+    ctx.fillText('Audio: Procedurally generated sound effects', GAME_WIDTH / 2, yPos + 10);
+    ctx.fillText('Graphics: Canvas 2D rendering', GAME_WIDTH / 2, yPos + 30);
+    
+    // Close button
+    drawButton('CLOSE', GAME_WIDTH / 2 - 70, GAME_HEIGHT - 90, 140, 45);
+    ctx.fillStyle = '#666';
+    ctx.font = '14px Arial';
+    ctx.fillText('or press ESC', GAME_WIDTH / 2, GAME_HEIGHT - 30);
 }
 
 // UI interaction helpers
 const buttons = {
     playButton: { x: GAME_WIDTH / 2 - 80, y: 380, width: 160, height: 50 },
-    restartButton: { x: GAME_WIDTH / 2 - 80, y: 320, width: 160, height: 50 }
+    restartButton: { x: GAME_WIDTH / 2 - 80, y: 400, width: 160, height: 50 },
+    helpButtonStart: { x: GAME_WIDTH / 2 - 25, y: 450, width: 50, height: 40 },
+    helpButtonGameOver: { x: GAME_WIDTH / 2 - 25, y: 465, width: 50, height: 35 },
+    pauseButton: { x: GAME_WIDTH - 60, y: 10, width: 50, height: 35 },
+    closeHelpButton: { x: GAME_WIDTH / 2 - 70, y: GAME_HEIGHT - 90, width: 140, height: 45 }
 };
 
 function isPointInButton(x, y, button) {
@@ -591,22 +850,42 @@ function isPointInButton(x, y, button) {
 
 function handleCanvasClick(event) {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = GAME_WIDTH / canvas.width;
-    const scaleY = GAME_HEIGHT / canvas.height;
+    const scaleX = GAME_WIDTH / (canvas.width / dpr);
+    const scaleY = GAME_HEIGHT / (canvas.height / dpr);
     const clickX = (event.clientX - rect.left) * scaleX;
     const clickY = (event.clientY - rect.top) * scaleY;
+    
+    // Help overlay takes priority
+    if (gameState.showingHelp) {
+        if (isPointInButton(clickX, clickY, buttons.closeHelpButton)) {
+            gameState.showingHelp = false;
+        }
+        return;
+    }
     
     if (gameState.current === STATE.START) {
         if (isPointInButton(clickX, clickY, buttons.playButton)) {
             startGame();
+        } else if (isPointInButton(clickX, clickY, buttons.helpButtonStart)) {
+            gameState.showingHelp = true;
         } else {
             toilet.flap();
         }
     } else if (gameState.current === STATE.PLAYING) {
-        toilet.flap();
+        if (isPointInButton(clickX, clickY, buttons.pauseButton)) {
+            togglePause();
+        } else {
+            toilet.flap();
+        }
+    } else if (gameState.current === STATE.PAUSED) {
+        if (isPointInButton(clickX, clickY, buttons.pauseButton)) {
+            togglePause();
+        }
     } else if (gameState.current === STATE.GAME_OVER) {
         if (isPointInButton(clickX, clickY, buttons.restartButton)) {
             restart();
+        } else if (isPointInButton(clickX, clickY, buttons.helpButtonGameOver)) {
+            gameState.showingHelp = true;
         }
     }
 }
@@ -622,22 +901,25 @@ function gameLoop() {
     drawGround();
     
     // Update game objects (only in PLAYING state)
-    toilet.update();
-    pipes.update();
+    if (gameState.current === STATE.PLAYING) {
+        toilet.update();
+        pipes.update();
+        gameState.frame++;
+    }
     
     // Draw game objects
     pipes.draw();
     toilet.draw();
     
-    // Draw UI
+    // Draw UI layers
     drawScore();
+    drawHUD();
     drawStartScreen();
     drawGameOver();
+    drawPauseScreen();
     
-    // Increment frame counter
-    if (gameState.current === STATE.PLAYING) {
-        gameState.frame++;
-    }
+    // Help overlay on top of everything
+    drawHelpOverlay();
     
     // Continue loop
     requestAnimationFrame(gameLoop);
