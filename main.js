@@ -13,26 +13,26 @@ const CONFIG = {
     gameHeight: 600,
     
     // Toilet physics
-    gravity: 0.35,
-    flapPower: -7,
-    maxVelocity: 8,
+    gravity: 0.3,
+    flapPower: -6.5,
+    maxVelocity: 7,
     
     // Pipe settings
     pipeWidth: 60,
-    baseSpeed: 1.5,
-    maxSpeed: 4.5,
-    speedIncrement: 0.15,
+    baseSpeed: 1.2,
+    maxSpeed: 3.5,
+    speedIncrement: 0.1,
     
-    baseGap: 180,
-    minGap: 130,
-    gapDecrement: 3,
+    baseGap: 200,
+    minGap: 150,
+    gapDecrement: 2,
     
-    baseSpawnInterval: 110,
-    minSpawnInterval: 75,
-    spawnDecrement: 2,
+    baseSpawnInterval: 120,
+    minSpawnInterval: 85,
+    spawnDecrement: 1.5,
     
     // Difficulty progression
-    pipesPerLevel: 5,  // Every 5 pipes = new level
+    pipesPerLevel: 8,  // Every 8 pipes = new level
     
     // Ground height
     groundHeight: 50
