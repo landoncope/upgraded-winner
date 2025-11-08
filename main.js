@@ -135,61 +135,10 @@ loadGameData();
 // Generate simple sound effects using Web Audio API
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-// Background music using Web Audio API (procedurally generated)
-let bgMusicOscillators = [];
-let bgMusicGain = null;
-let isMusicPlaying = false;
-
-function createBackgroundMusic() {
-    if (isMusicPlaying) return;
-    
-    // Create a simple cheerful melody loop
-    const notes = [
-        { freq: 523.25, duration: 0.3 }, // C5
-        { freq: 587.33, duration: 0.3 }, // D5
-        { freq: 659.25, duration: 0.3 }, // E5
-        { freq: 587.33, duration: 0.3 }, // D5
-        { freq: 523.25, duration: 0.3 }, // C5
-        { freq: 659.25, duration: 0.3 }, // E5
-        { freq: 783.99, duration: 0.6 }  // G5
-    ];
-    
-    let currentTime = audioContext.currentTime;
-    
-    function playMelodyLoop() {
-        if (!isMusicPlaying) return;
-        
-        bgMusicGain = audioContext.createGain();
-        bgMusicGain.connect(audioContext.destination);
-        bgMusicGain.gain.value = 0.1; // Quiet background music
-        
-        notes.forEach((note, index) => {
-            const oscillator = audioContext.createOscillator();
-            oscillator.connect(bgMusicGain);
-            oscillator.type = 'sine';
-            oscillator.frequency.value = note.freq;
-            
-            const startTime = currentTime + (index * 0.3);
-            oscillator.start(startTime);
-            oscillator.stop(startTime + note.duration);
-        });
-        
-        currentTime += notes.length * 0.3;
-        
-        // Schedule next loop
-        setTimeout(playMelodyLoop, notes.length * 300);
-    }
-    
-    isMusicPlaying = true;
-    playMelodyLoop();
-}
-
-function stopBackgroundMusic() {
-    isMusicPlaying = false;
-    if (bgMusicGain) {
-        bgMusicGain.gain.setValueAtTime(0, audioContext.currentTime);
-    }
-}
+// Background music - local file
+const bgMusic = new Audio('background-music.mp3');
+bgMusic.loop = true;
+bgMusic.volume = 0.25;
 
 function createFlapSound() {
     const oscillator = audioContext.createOscillator();
@@ -261,19 +210,20 @@ const audio = {
     toggleMute() {
         gameState.isMuted = !gameState.isMuted;
         if (gameState.isMuted) {
-            stopBackgroundMusic();
+            bgMusic.pause();
         } else if (gameState.current === STATE.PLAYING) {
-            createBackgroundMusic();
+            bgMusic.play().catch(e => console.error('Music play failed:', e));
         }
         saveGameData();
     },
     startMusic() {
         if (!gameState.isMuted) {
-            createBackgroundMusic();
+            bgMusic.play().catch(e => console.error('Music start failed:', e));
         }
     },
     stopMusic() {
-        stopBackgroundMusic();
+        bgMusic.pause();
+        bgMusic.currentTime = 0;
     }
 };
 
@@ -620,11 +570,11 @@ function startGame() {
 function togglePause() {
     if (gameState.current === STATE.PLAYING) {
         gameState.current = STATE.PAUSED;
-        stopBackgroundMusic();
+        bgMusic.pause();
     } else if (gameState.current === STATE.PAUSED) {
         gameState.current = STATE.PLAYING;
         if (!gameState.isMuted) {
-            createBackgroundMusic();
+            bgMusic.play().catch(e => console.error('Music resume failed:', e));
         }
     }
 }
