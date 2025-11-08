@@ -137,7 +137,8 @@ const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 // Background music
 const bgMusic = new Audio();
-bgMusic.src = 'https://cdn.pixabay.com/audio/2022/03/10/audio_4a409c29e6.mp3'; // "Funny Bit" by Coma-Media (Pixabay License)
+// Using a reliable public domain music source
+bgMusic.src = 'https://freepd.com/music/Cipher.mp3'; // "Cipher" by Kevin MacLeod (Public Domain)
 bgMusic.loop = true;
 bgMusic.volume = 0.3;
 bgMusic.preload = 'auto';
@@ -145,6 +146,10 @@ bgMusic.preload = 'auto';
 // Add error listener
 bgMusic.addEventListener('error', (e) => {
     console.error('Background music error:', e);
+    console.log('Trying fallback source...');
+    // Fallback to different source
+    bgMusic.src = 'https://archive.org/download/Kevin_MacLeod_-_Parting_of_the_Ways/Kevin_MacLeod_-_Parting_of_the_Ways.mp3';
+    bgMusic.load();
 });
 
 bgMusic.addEventListener('canplaythrough', () => {
