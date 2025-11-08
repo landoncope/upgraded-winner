@@ -247,6 +247,7 @@ const toilet = {
             audio.playFlap();
             if (gameState.current === STATE.START) {
                 gameState.current = STATE.PLAYING;
+                audio.startMusic();
             }
         }
     },
@@ -516,6 +517,18 @@ canvas.addEventListener('touchstart', (e) => {
     handleCanvasClick(touch);
 });
 
+// Enable audio context on first user interaction (required by browsers)
+let audioInitialized = false;
+function initAudio() {
+    if (!audioInitialized) {
+        audioContext.resume();
+        audioInitialized = true;
+    }
+}
+
+document.addEventListener('click', initAudio, { once: true });
+document.addEventListener('keydown', initAudio, { once: true });
+
 // ===========================
 // GAME LOGIC
 // ===========================
@@ -552,7 +565,6 @@ function restart() {
 
 function startGame() {
     gameState.current = STATE.PLAYING;
-    audio.startMusic();
     toilet.flap();
 }
 
