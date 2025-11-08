@@ -9,7 +9,7 @@
 // All game tunables in one place for easy balancing
 const CONFIG = {
     // Canvas settings
-    gameWidth: 400,
+    gameWidth: 600,
     gameHeight: 600,
     
     // Toilet physics
