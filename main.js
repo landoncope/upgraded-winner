@@ -140,6 +140,16 @@ const bgMusic = new Audio();
 bgMusic.src = 'https://cdn.pixabay.com/audio/2022/03/10/audio_4a409c29e6.mp3'; // "Funny Bit" by Coma-Media (Pixabay License)
 bgMusic.loop = true;
 bgMusic.volume = 0.3;
+bgMusic.preload = 'auto';
+
+// Add error listener
+bgMusic.addEventListener('error', (e) => {
+    console.error('Background music error:', e);
+});
+
+bgMusic.addEventListener('canplaythrough', () => {
+    console.log('Background music loaded successfully');
+});
 
 function createFlapSound() {
     const oscillator = audioContext.createOscillator();
@@ -212,14 +222,17 @@ const audio = {
         gameState.isMuted = !gameState.isMuted;
         if (gameState.isMuted) {
             bgMusic.pause();
-        } else {
-            bgMusic.play().catch(e => console.log('Music playback failed:', e));
+        } else if (gameState.current === STATE.PLAYING) {
+            bgMusic.play().catch(e => console.error('Music toggle play failed:', e));
         }
         saveGameData();
     },
     startMusic() {
         if (!gameState.isMuted) {
-            bgMusic.play().catch(e => console.log('Music playback failed:', e));
+            console.log('Attempting to start music...');
+            bgMusic.play()
+                .then(() => console.log('Music started successfully'))
+                .catch(e => console.error('Music playback failed:', e));
         }
     },
     stopMusic() {
@@ -575,7 +588,7 @@ function togglePause() {
     } else if (gameState.current === STATE.PAUSED) {
         gameState.current = STATE.PLAYING;
         if (!gameState.isMuted) {
-            bgMusic.play().catch(e => console.log('Music playback failed:', e));
+            bgMusic.play().catch(e => console.error('Music resume failed:', e));
         }
     }
 }
