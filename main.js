@@ -51,9 +51,9 @@ const toilet = {
     width: 40,
     height: 40,
     velocity: 0,
-    gravity: 0.5,
-    flapPower: -9,
-    maxVelocity: 10,
+    gravity: 0.35,
+    flapPower: -7,
+    maxVelocity: 8,
     
     flap() {
         if (!gameState.gameOver) {
@@ -114,10 +114,10 @@ const toilet = {
 // ===========================
 const pipes = {
     list: [],
-    gap: 150,
+    gap: 180,
     width: 60,
-    speed: 2,
-    spawnInterval: 90, // frames between spawns
+    speed: 1.5,
+    spawnInterval: 110, // frames between spawns
     
     spawn() {
         const minY = 50;
