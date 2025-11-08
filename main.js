@@ -33,13 +33,125 @@ function scaleContext() {
 }
 
 // ===========================
+// LOCAL STORAGE
+// ===========================
+function loadGameData() {
+    const saved = localStorage.getItem('flyingToiletData');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            gameState.highScore = data.highScore || 0;
+            gameState.isMuted = data.isMuted || false;
+        } catch (e) {
+            console.error('Failed to load game data');
+        }
+    }
+}
+
+function saveGameData() {
+    const data = {
+        highScore: gameState.highScore,
+        isMuted: gameState.isMuted
+    };
+    localStorage.setItem('flyingToiletData', JSON.stringify(data));
+}
+
+loadGameData();
+
+// ===========================
+// AUDIO SYSTEM
+// ===========================
+// Generate simple sound effects using Web Audio API
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+function createFlapSound() {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 400;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+}
+
+function createScoreSound() {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'square';
+    
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.15);
+}
+
+function createHitSound() {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 100;
+    oscillator.type = 'sawtooth';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+}
+
+const audio = {
+    playFlap() {
+        if (!gameState.isMuted) {
+            createFlapSound();
+        }
+    },
+    playScore() {
+        if (!gameState.isMuted) {
+            createScoreSound();
+        }
+    },
+    playHit() {
+        if (!gameState.isMuted) {
+            createHitSound();
+        }
+    },
+    toggleMute() {
+        gameState.isMuted = !gameState.isMuted;
+        saveGameData();
+    }
+};
+
+// ===========================
 // GAME STATE
 // ===========================
+const STATE = {
+    START: 'START',
+    PLAYING: 'PLAYING',
+    GAME_OVER: 'GAME_OVER'
+};
+
 const gameState = {
-    playing: false,
-    gameOver: false,
+    current: STATE.START,
     score: 0,
-    frame: 0
+    highScore: 0,
+    frame: 0,
+    isMuted: false
 };
 
 // ===========================
@@ -56,16 +168,17 @@ const toilet = {
     maxVelocity: 8,
     
     flap() {
-        if (!gameState.gameOver) {
+        if (gameState.current !== STATE.GAME_OVER) {
             this.velocity = this.flapPower;
-            if (!gameState.playing) {
-                gameState.playing = true;
+            audio.playFlap();
+            if (gameState.current === STATE.START) {
+                gameState.current = STATE.PLAYING;
             }
         }
     },
     
     update() {
-        if (!gameState.playing) return;
+        if (gameState.current !== STATE.PLAYING) return;
         
         // Apply gravity
         this.velocity += this.gravity;
@@ -94,9 +207,40 @@ const toilet = {
     },
     
     draw() {
-        // Draw toilet emoji
-        ctx.font = '40px Arial';
-        ctx.fillText('🚽', this.x - 5, this.y + 35);
+        // Draw detailed toilet with lid and bowl
+        const tx = this.x;
+        const ty = this.y;
+        
+        // Toilet bowl (main body)
+        ctx.fillStyle = '#FFF';
+        ctx.beginPath();
+        ctx.ellipse(tx + 20, ty + 30, 18, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#CCC';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Toilet tank (back)
+        ctx.fillStyle = '#F5F5F5';
+        ctx.fillRect(tx + 8, ty + 5, 24, 18);
+        ctx.strokeStyle = '#CCC';
+        ctx.strokeRect(tx + 8, ty + 5, 24, 18);
+        
+        // Toilet seat
+        ctx.fillStyle = '#87CEEB';
+        ctx.beginPath();
+        ctx.ellipse(tx + 20, ty + 28, 16, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#6B9DC4';
+        ctx.stroke();
+        
+        // Flush handle
+        ctx.strokeStyle = '#AAA';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(tx + 30, ty + 12);
+        ctx.lineTo(tx + 35, ty + 12);
+        ctx.stroke();
     },
     
     getBounds() {
@@ -133,7 +277,7 @@ const pipes = {
     },
     
     update() {
-        if (!gameState.playing) return;
+        if (gameState.current !== STATE.PLAYING) return;
         
         // Spawn new pipes
         if (gameState.frame % this.spawnInterval === 0) {
@@ -160,6 +304,7 @@ const pipes = {
             if (!pipe.scored && pipe.x + this.width < toilet.x) {
                 pipe.scored = true;
                 gameState.score++;
+                audio.playScore();
             }
         }
     },
@@ -182,19 +327,40 @@ const pipes = {
     },
     
     draw() {
-        ctx.fillStyle = '#6B8E23';
-        ctx.strokeStyle = '#556B2F';
-        ctx.lineWidth = 3;
-        
+        // Draw glossy PVC pipes with gradients
         for (const pipe of this.list) {
             // Top pipe
+            const topGradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + this.width, 0);
+            topGradient.addColorStop(0, '#8FBC8F');
+            topGradient.addColorStop(0.5, '#A8D5A8');
+            topGradient.addColorStop(1, '#7DA87D');
+            ctx.fillStyle = topGradient;
             ctx.fillRect(pipe.x, 0, this.width, pipe.topHeight);
-            ctx.strokeRect(pipe.x, 0, this.width, pipe.topHeight);
+            
+            // Top pipe cap
+            ctx.fillStyle = '#6B8E6B';
+            ctx.fillRect(pipe.x - 3, pipe.topHeight - 20, this.width + 6, 20);
+            
+            // Shine effect on top pipe
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(pipe.x + 5, 0, 15, pipe.topHeight - 20);
             
             // Bottom pipe
             const bottomHeight = GAME_HEIGHT - 50 - pipe.bottomY;
+            const bottomGradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + this.width, 0);
+            bottomGradient.addColorStop(0, '#8FBC8F');
+            bottomGradient.addColorStop(0.5, '#A8D5A8');
+            bottomGradient.addColorStop(1, '#7DA87D');
+            ctx.fillStyle = bottomGradient;
             ctx.fillRect(pipe.x, pipe.bottomY, this.width, bottomHeight);
-            ctx.strokeRect(pipe.x, pipe.bottomY, this.width, bottomHeight);
+            
+            // Bottom pipe cap
+            ctx.fillStyle = '#6B8E6B';
+            ctx.fillRect(pipe.x - 3, pipe.bottomY, this.width + 6, 20);
+            
+            // Shine effect on bottom pipe
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(pipe.x + 5, pipe.bottomY + 20, 15, bottomHeight - 20);
         }
     },
     
@@ -210,37 +376,47 @@ const pipes = {
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' || e.code === 'ArrowUp') {
         e.preventDefault();
-        toilet.flap();
+        if (gameState.current === STATE.PLAYING || gameState.current === STATE.START) {
+            toilet.flap();
+        }
     }
     
-    if (e.code === 'KeyR' && gameState.gameOver) {
+    if (e.code === 'KeyR' && gameState.current === STATE.GAME_OVER) {
         restart();
+    }
+    
+    if (e.code === 'KeyM') {
+        audio.toggleMute();
     }
 });
 
 // Mouse/Touch input
-canvas.addEventListener('click', () => {
-    toilet.flap();
-});
+canvas.addEventListener('click', handleCanvasClick);
 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    toilet.flap();
+    const touch = e.touches[0];
+    handleCanvasClick(touch);
 });
 
 // ===========================
 // GAME LOGIC
 // ===========================
 function endGame() {
-    if (!gameState.gameOver) {
-        gameState.gameOver = true;
-        gameState.playing = false;
+    if (gameState.current !== STATE.GAME_OVER) {
+        gameState.current = STATE.GAME_OVER;
+        audio.playHit();
+        
+        // Update high score
+        if (gameState.score > gameState.highScore) {
+            gameState.highScore = gameState.score;
+            saveGameData();
+        }
     }
 }
 
 function restart() {
-    gameState.playing = false;
-    gameState.gameOver = false;
+    gameState.current = STATE.PLAYING;
     gameState.score = 0;
     gameState.frame = 0;
     
@@ -250,61 +426,189 @@ function restart() {
     pipes.reset();
 }
 
+function startGame() {
+    gameState.current = STATE.PLAYING;
+    toilet.flap();
+}
+
 // ===========================
 // RENDERING
 // ===========================
 function drawBackground() {
     // Sky gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
-    gradient.addColorStop(0, '#87CEEB');
+    gradient.addColorStop(0, '#B0E0E6');
     gradient.addColorStop(1, '#E0F6FF');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Bathroom tile pattern
+    ctx.strokeStyle = '#D3D3D3';
+    ctx.lineWidth = 1;
+    const tileSize = 40;
+    
+    for (let x = 0; x < GAME_WIDTH; x += tileSize) {
+        for (let y = 0; y < GAME_HEIGHT - 50; y += tileSize) {
+            ctx.strokeRect(x, y, tileSize, tileSize);
+        }
+    }
 }
 
 function drawGround() {
-    // Ground strip
-    ctx.fillStyle = '#8B4513';
+    // Bath mat / tiled floor
+    const gradient = ctx.createLinearGradient(0, GAME_HEIGHT - 50, 0, GAME_HEIGHT);
+    gradient.addColorStop(0, '#D2691E');
+    gradient.addColorStop(1, '#8B4513');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, GAME_HEIGHT - 50, GAME_WIDTH, 50);
     
+    // Mat texture
     ctx.fillStyle = '#A0522D';
-    for (let i = 0; i < GAME_WIDTH; i += 20) {
-        ctx.fillRect(i, GAME_HEIGHT - 50, 10, 10);
+    for (let i = 0; i < GAME_WIDTH; i += 15) {
+        for (let j = 0; j < 50; j += 15) {
+            ctx.fillRect(i, GAME_HEIGHT - 50 + j, 8, 8);
+        }
     }
 }
 
 function drawScore() {
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 48px Arial';
+    if (gameState.current !== STATE.START) {
+        ctx.fillStyle = '#000';
+        ctx.strokeStyle = '#FFF';
+        ctx.lineWidth = 4;
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeText(gameState.score, GAME_WIDTH / 2, 60);
+        ctx.fillText(gameState.score, GAME_WIDTH / 2, 60);
+    }
+}
+
+function drawButton(text, x, y, width, height) {
+    // Button background with gradient
+    const gradient = ctx.createLinearGradient(x, y, x, y + height);
+    gradient.addColorStop(0, '#4CAF50');
+    gradient.addColorStop(1, '#45a049');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, width, height);
+    
+    // Button border
+    ctx.strokeStyle = '#2E7D32';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, width, height);
+    
+    // Button text
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(gameState.score, GAME_WIDTH / 2, 60);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + width / 2, y + height / 2);
+}
+
+function drawStartScreen() {
+    if (gameState.current !== STATE.START) return;
+    
+    // Semi-transparent overlay
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Title
+    ctx.fillStyle = '#2E7D32';
+    ctx.font = 'bold 64px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Flying Toilet', GAME_WIDTH / 2, 120);
+    
+    // Toilet emoji decoration
+    ctx.font = '80px Arial';
+    ctx.fillText('🚽', GAME_WIDTH / 2, 200);
+    
+    // Instructions
+    ctx.fillStyle = '#333';
+    ctx.font = '20px Arial';
+    ctx.fillText('Tap/Space to flap', GAME_WIDTH / 2, 280);
+    ctx.fillText('Avoid the pipes', GAME_WIDTH / 2, 310);
+    ctx.fillText('Press M to mute', GAME_WIDTH / 2, 340);
+    
+    // Play button
+    drawButton('PLAY', GAME_WIDTH / 2 - 80, 380, 160, 50);
+    
+    // Mute button
+    const muteText = gameState.isMuted ? '🔇 MUTED' : '🔊 SOUND ON';
+    ctx.fillStyle = '#666';
+    ctx.font = '18px Arial';
+    ctx.fillText(muteText, GAME_WIDTH / 2, 460);
+    
+    // High score
+    if (gameState.highScore > 0) {
+        ctx.fillStyle = '#888';
+        ctx.font = '20px Arial';
+        ctx.fillText(`Best: ${gameState.highScore}`, GAME_WIDTH / 2, 500);
+    }
 }
 
 function drawGameOver() {
-    if (!gameState.gameOver) return;
+    if (gameState.current !== STATE.GAME_OVER) return;
     
     // Semi-transparent overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     
     // Game Over text
-    ctx.fillStyle = '#FFF';
-    ctx.font = 'bold 48px Arial';
+    ctx.fillStyle = '#FF6B6B';
+    ctx.font = 'bold 56px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40);
+    ctx.fillText('GAME OVER', GAME_WIDTH / 2, 180);
     
-    ctx.font = '24px Arial';
-    ctx.fillText(`Score: ${gameState.score}`, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 10);
-    ctx.fillText('Press R to Restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 50);
+    // Current score
+    ctx.fillStyle = '#FFF';
+    ctx.font = '32px Arial';
+    ctx.fillText(`Score: ${gameState.score}`, GAME_WIDTH / 2, 240);
+    
+    // High score
+    ctx.font = 'bold 28px Arial';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(`Best: ${gameState.highScore}`, GAME_WIDTH / 2, 280);
+    
+    // Restart button
+    drawButton('RESTART', GAME_WIDTH / 2 - 80, 320, 160, 50);
+    
+    // Mute button
+    const muteText = gameState.isMuted ? 'UNMUTE (M)' : 'MUTE (M)';
+    ctx.fillStyle = '#AAA';
+    ctx.font = '18px Arial';
+    ctx.fillText(muteText, GAME_WIDTH / 2, 400);
 }
 
-function drawStartMessage() {
-    if (gameState.playing || gameState.gameOver) return;
+// UI interaction helpers
+const buttons = {
+    playButton: { x: GAME_WIDTH / 2 - 80, y: 380, width: 160, height: 50 },
+    restartButton: { x: GAME_WIDTH / 2 - 80, y: 320, width: 160, height: 50 }
+};
+
+function isPointInButton(x, y, button) {
+    return x >= button.x && x <= button.x + button.width &&
+           y >= button.y && y <= button.y + button.height;
+}
+
+function handleCanvasClick(event) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = GAME_WIDTH / canvas.width;
+    const scaleY = GAME_HEIGHT / canvas.height;
+    const clickX = (event.clientX - rect.left) * scaleX;
+    const clickY = (event.clientY - rect.top) * scaleY;
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.font = '20px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('Click or Press Space to Start', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80);
+    if (gameState.current === STATE.START) {
+        if (isPointInButton(clickX, clickY, buttons.playButton)) {
+            startGame();
+        } else {
+            toilet.flap();
+        }
+    } else if (gameState.current === STATE.PLAYING) {
+        toilet.flap();
+    } else if (gameState.current === STATE.GAME_OVER) {
+        if (isPointInButton(clickX, clickY, buttons.restartButton)) {
+            restart();
+        }
+    }
 }
 
 // ===========================
@@ -317,7 +621,7 @@ function gameLoop() {
     drawBackground();
     drawGround();
     
-    // Update game objects
+    // Update game objects (only in PLAYING state)
     toilet.update();
     pipes.update();
     
@@ -327,11 +631,11 @@ function gameLoop() {
     
     // Draw UI
     drawScore();
-    drawStartMessage();
+    drawStartScreen();
     drawGameOver();
     
     // Increment frame counter
-    if (gameState.playing) {
+    if (gameState.current === STATE.PLAYING) {
         gameState.frame++;
     }
     
