@@ -135,6 +135,12 @@ loadGameData();
 // Generate simple sound effects using Web Audio API
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+// Background music
+const bgMusic = new Audio();
+bgMusic.src = 'https://cdn.pixabay.com/audio/2022/03/10/audio_4a409c29e6.mp3'; // "Funny Bit" by Coma-Media (Pixabay License)
+bgMusic.loop = true;
+bgMusic.volume = 0.3;
+
 function createFlapSound() {
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -204,7 +210,21 @@ const audio = {
     },
     toggleMute() {
         gameState.isMuted = !gameState.isMuted;
+        if (gameState.isMuted) {
+            bgMusic.pause();
+        } else {
+            bgMusic.play().catch(e => console.log('Music playback failed:', e));
+        }
         saveGameData();
+    },
+    startMusic() {
+        if (!gameState.isMuted) {
+            bgMusic.play().catch(e => console.log('Music playback failed:', e));
+        }
+    },
+    stopMusic() {
+        bgMusic.pause();
+        bgMusic.currentTime = 0;
     }
 };
 
@@ -503,6 +523,7 @@ function endGame() {
     if (gameState.current !== STATE.GAME_OVER) {
         gameState.current = STATE.GAME_OVER;
         audio.playHit();
+        audio.stopMusic();
         
         // Update high score and best level
         if (gameState.score > gameState.highScore) {
@@ -526,18 +547,24 @@ function restart() {
     toilet.velocity = 0;
     
     pipes.reset();
+    audio.startMusic();
 }
 
 function startGame() {
     gameState.current = STATE.PLAYING;
+    audio.startMusic();
     toilet.flap();
 }
 
 function togglePause() {
     if (gameState.current === STATE.PLAYING) {
         gameState.current = STATE.PAUSED;
+        bgMusic.pause();
     } else if (gameState.current === STATE.PAUSED) {
         gameState.current = STATE.PLAYING;
+        if (!gameState.isMuted) {
+            bgMusic.play().catch(e => console.log('Music playback failed:', e));
+        }
     }
 }
 
