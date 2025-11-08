@@ -27,8 +27,8 @@ const CONFIG = {
     minGap: 150,
     gapDecrement: 2,
     
-    baseSpawnInterval: 120,
-    minSpawnInterval: 85,
+    baseSpawnInterval: 150,
+    minSpawnInterval: 110,
     spawnDecrement: 1.5,
     
     // Difficulty progression
